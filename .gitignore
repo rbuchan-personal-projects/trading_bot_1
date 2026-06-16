@@ -1,0 +1,24 @@
+# Rust build artifacts
+/target
+
+# Data files
+*.csv
+
+# Generated reports (autosave/final JSON state files)
+/reports/
+
+# IDE settings
+.idea/
+
+# macOS
+.DS_Store
+
+# Environment variables / secrets
+.env
+.env.*
+
+# Editor backup/swap files
+*~
+*.swp
+*.swo
+

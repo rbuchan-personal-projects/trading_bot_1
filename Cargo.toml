@@ -1,0 +1,26 @@
+[package]
+name = "trading_bot_1"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rust_decimal = { version = "1", features = ["serde"] }
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.11", features = ["json"] }
+barter-data = "0.10"
+barter-instrument = "0.3"
+rust_ti = "2"
+async-trait = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+csv = "1"
+glob = "0.3"
+uuid = { version = "1", features = ["v4"] }
+tokio-tungstenite = { version = "0.21", features = ["native-tls"] }
+futures-util = "0.3"
+ctrlc = "3"
+
+[[bin]]
+name = "live_paper"
+path = "src/bin/live_paper.rs"
