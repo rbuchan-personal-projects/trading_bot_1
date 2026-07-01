@@ -24,3 +24,7 @@ ctrlc = "3"
 [[bin]]
 name = "live_paper"
 path = "src/bin/live_paper.rs"
+
+[[bin]]
+name = "backtest_all"
+path = "src/bin/backtest_all.rs"

@@ -54,6 +54,12 @@ pub struct PaperExecutor {
     /// Regime label staged by the caller before the next Long entry.
     /// Consumed by `process_signal` when a position opens.
     pending_regime: Option<String>,
+    /// Exchange fee charged per side, as a percentage (e.g. 0.1 for 0.1%).
+    /// Deducted as a round-trip cost (2×) on every completed trade.
+    fee_pct_per_side: f64,
+    /// Estimated slippage per side, as a percentage (e.g. 0.05 for 0.05%).
+    /// Deducted alongside fees on every completed trade.
+    slippage_pct_per_side: f64,
 }
 
 impl PaperExecutor {
@@ -68,7 +74,27 @@ impl PaperExecutor {
             max_drawdown_pct: 0.0,
             risk_monitor: None,
             pending_regime: None,
+            fee_pct_per_side: 0.0,
+            slippage_pct_per_side: 0.0,
         }
+    }
+
+    /// Set the per-side exchange fee (e.g. `0.1` for Binance taker 0.1%).
+    /// Applied as a round-trip deduction (entry + exit) on every closed trade.
+    pub fn with_fees(mut self, fee_pct_per_side: f64) -> Self {
+        self.fee_pct_per_side = fee_pct_per_side;
+        self
+    }
+
+    /// Set the per-side slippage estimate (e.g. `0.05` for half-spread).
+    /// Applied alongside fees on every closed trade.
+    pub fn with_slippage(mut self, slippage_pct_per_side: f64) -> Self {
+        self.slippage_pct_per_side = slippage_pct_per_side;
+        self
+    }
+
+    fn round_trip_cost(&self) -> f64 {
+        2.0 * (self.fee_pct_per_side + self.slippage_pct_per_side)
     }
 
     /// Stage a regime label to be recorded on the next Long entry.
@@ -107,11 +133,12 @@ impl PaperExecutor {
             }
             Decision::ClosePosition => {
                 if let Some(pos) = self.position.take() {
-                    let pnl_pct = match &pos.decision {
+                    let gross_pnl = match &pos.decision {
                         Decision::Long => (price - pos.price) / pos.price * 100.0,
                         Decision::Short => (pos.price - price) / pos.price * 100.0,
                         _ => 0.0,
                     };
+                    let pnl_pct = gross_pnl - self.round_trip_cost();
                     self.equity *= 1.0 + pnl_pct / 100.0;
                     self.trades.push(TradeRecord {
                         entry_bar: pos.bar,
@@ -178,13 +205,12 @@ impl PaperExecutor {
         let bars_held = bar.saturating_sub(pos.bar);
 
         let reason = monitor.evaluate(unrealised_pct, bars_held, &pos.decision)?;
-        // Trigger → close at current price.  We synthesise a ClosePosition
-        // signal-shape exit so the trade log carries the real exit reason
-        // via the decision field on a future revision; for now we just record
-        // the close as if the strategy emitted it.
+        // Trigger → close at current price.  Risk evaluation uses gross PnL
+        // (stop levels are in gross terms); recorded PnL is net of fees.
         let _ = reason;
         let pos = self.position.take().unwrap();
-        self.equity *= 1.0 + unrealised_pct / 100.0;
+        let net_pnl = unrealised_pct - self.round_trip_cost();
+        self.equity *= 1.0 + net_pnl / 100.0;
         self.trades.push(TradeRecord {
             entry_bar: pos.bar,
             exit_bar: bar,
@@ -192,7 +218,7 @@ impl PaperExecutor {
             exit_time: time,
             entry_price: pos.price,
             exit_price: price,
-            pnl_pct: unrealised_pct,
+            pnl_pct: net_pnl,
             entry_decision: pos.decision,
             exit_decision: Decision::ClosePosition,
             entry_strength: pos.strength,
@@ -214,11 +240,12 @@ impl PaperExecutor {
 
     pub fn force_close(&mut self, bar: usize, price: f64, time: DateTime<Utc>) {
         if let Some(pos) = self.position.take() {
-            let pnl_pct = match &pos.decision {
+            let gross_pnl = match &pos.decision {
                 Decision::Long => (price - pos.price) / pos.price * 100.0,
                 Decision::Short => (pos.price - price) / pos.price * 100.0,
                 _ => 0.0,
             };
+            let pnl_pct = gross_pnl - self.round_trip_cost();
             self.equity *= 1.0 + pnl_pct / 100.0;
             self.trades.push(TradeRecord {
                 entry_bar: pos.bar,
