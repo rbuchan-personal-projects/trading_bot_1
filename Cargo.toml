@@ -2,6 +2,7 @@
 name = "trading_bot_1"
 version = "0.1.0"
 edition = "2024"
+default_run = "live_paper"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
