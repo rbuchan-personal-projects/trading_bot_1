@@ -5,7 +5,8 @@
 *.csv
 
 # Generated reports (autosave/final JSON state files)
-/reports/
+/data/reports/
+/backtesting/
 
 # IDE settings
 .idea/

@@ -649,8 +649,8 @@ fn save_report(executor: &PaperExecutor, strategy_name: &str, bar_count: usize, 
         .collect();
 
     let ts = Utc::now().format("%Y%m%d_%H%M%S");
-    let json_path = format!("reports/live_{}_{}_{}.json", safe_name, label, ts);
-    let csv_path  = format!("reports/live_{}_{}_{}_trades.csv", safe_name, label, ts);
+    let json_path = format!("data/reports/live_{}_{}_{}.json", safe_name, label, ts);
+    let csv_path  = format!("data/reports/live_{}_{}_{}_trades.csv", safe_name, label, ts);
 
     let report = BacktestReport::from_executor(
         executor,

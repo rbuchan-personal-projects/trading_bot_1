@@ -245,7 +245,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .chars()
             .map(|c| if c.is_alphanumeric() || c == '-' { c } else { '_' })
             .collect();
-        let base = format!("reports/backtest_{}_{}", date, slug);
+        let base = format!("/backtesting/reports/backtest_{}_{}", date, slug);
         report.write_json(&format!("{}.json", base))?;
         report.write_trades_csv(&format!("{}_trades.csv", base))?;
         println!("  {}.json + _trades.csv", base);
