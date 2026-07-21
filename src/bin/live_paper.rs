@@ -37,6 +37,12 @@
 //! 8. **Regime logged in trade CSV** — entry regime label written to the
 //!    `regime` column so blocked-vs-passed decisions are reviewable.
 //!
+//! 9. **Liquidity-sweep strategy (v5)** — `LiquiditySweepStrategy` fades
+//!    daily-level liquidity sweeps: prior-day extremes raided on a volume
+//!    spike then rejected back toward the range mid, gated by the dual-EMA
+//!    regime filter.  Uses wide daily-scale risk controls (2.0% hard stop,
+//!    1440-bar max hold) matching the `backtest_all` production config.
+//!
 //! ## Usage
 //!
 //! ```sh
@@ -66,7 +72,8 @@ use trading_bot_1::backtest::paper_executor::PaperExecutor;
 use trading_bot_1::backtest::report::BacktestReport;
 use trading_bot_1::risk_manager::RiskControls;
 use trading_bot_1::strategy_engine::live::{
-    BollingerRsiStrategy, EntryMode, RegimeDetector, RegimeGatedStrategy, RsiStrategy, TrendFilter,
+    BollingerRsiStrategy, EntryMode, LiquiditySweepStrategy, RegimeDetector, RegimeGatedStrategy,
+    RsiStrategy, TrendFilter,
 };
 use trading_bot_1::strategy_engine::llm_filter::{CandleSnapshot, LlmPreTradeFilter};
 use trading_bot_1::strategy_engine::SignalGenerator;
@@ -338,6 +345,17 @@ async fn main() {
         max_hold_bars: Some(90),
     };
 
+    // v5 Sweep: daily-level sweep reversions play out over hours, so this uses
+    // the wide daily-scale controls from backtest_all — a 2.0% hard stop behind
+    // the strategy's own invalidation exit, trailing armed only after a real
+    // 2.0% move, and a day-scale (1440-bar) max hold.
+    let sweep_risk = RiskControls {
+        hard_stop_pct: Some(2.0),
+        trailing_stop_pct: Some(1.5),
+        trailing_arm_pct: Some(2.0),
+        max_hold_bars: Some(1440),
+    };
+
     // --- Build strategy slots ---
     let mut slots: Vec<StrategySlot> = vec![
         // 1. v1 RSI: tighter stop (1.0%), trailing stop arm 0.5%/trail 0.4pp,
@@ -384,6 +402,17 @@ async fn main() {
             INITIAL_CAPITAL,
             regime_risk.clone(),
         ).with_min_strength(0.05),
+
+        // 5. v5 Sweep(1d,fade,regime): fades daily-level liquidity sweeps —
+        //    prior-day extremes raided on a volume spike then rejected, faded
+        //    back toward the range mid.  Dual-EMA regime gate blocks
+        //    counter-trend fades.  Matches the backtest_all production config.
+        StrategySlot::new_with_risk(
+            "v5 Sweep(1d,fade,regime)",
+            Box::new(LiquiditySweepStrategy::new()),
+            INITIAL_CAPITAL,
+            sweep_risk,
+        ),
     ];
 
     // 5. v4 LLM+Regime+RSI — only when API key present; uses same early seed.

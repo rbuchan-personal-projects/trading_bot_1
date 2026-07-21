@@ -1,4 +1,4 @@
-//! Run all six trading strategies against the full historical BTC/USD 1-minute
+//! Run all seven trading strategies against the full historical BTC/USD 1-minute
 //! dataset and print a side-by-side comparison table.
 //!
 //! Usage:
@@ -18,8 +18,8 @@ use trading_bot_1::risk_manager::RiskControls;
 use trading_bot_1::strategy_engine::{
     SignalGenerator,
     live::{
-        BollingerRsiStrategy, DivergenceStrategy, EntryMode, RegimeDetector,
-        RegimeGatedStrategy, RsiDivergenceStrategy, RsiStrategy, TrendFilter,
+        BollingerRsiStrategy, DivergenceStrategy, EntryMode, LiquiditySweepStrategy,
+        RegimeDetector, RegimeGatedStrategy, RsiDivergenceStrategy, RsiStrategy, TrendFilter,
     },
 };
 
@@ -89,7 +89,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
     println!("╔══════════════════════════════════════════════════════════════════╗");
     println!("║              BACKTEST ALL STRATEGIES                            ║");
-    println!("║       BTC/USD 1-minute candles  •  Dec 2025 – Apr 2026         ║");
+    println!("║       BTC/USD 1-minute candles  •  full local dataset          ║");
     println!("╚══════════════════════════════════════════════════════════════════╝");
     println!();
     println!(
@@ -170,6 +170,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         trailing_arm_pct: Some(0.5),
         max_hold_bars: Some(90),
     };
+    // Daily-level sweep reversions play out over hours: wide hard stop
+    // backstopping the strategy's invalidation exit, trailing armed only
+    // after a real move, day-scale max hold.
+    let sweep_risk = RiskControls {
+        hard_stop_pct: Some(2.0),
+        trailing_stop_pct: Some(1.5),
+        trailing_arm_pct: Some(2.0),
+        max_hold_bars: Some(1440),
+    };
 
     // -- Strategy definitions ---------------------------------------------------
     // Strategies 5 & 6 (Divergence, RSI+Divergence) are not currently wired
@@ -213,6 +222,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Box::new(RsiDivergenceStrategy::with_params(14, 5, 30.0, 70.0, 10)),
             baseline_risk.clone(),
         ),
+        (
+            "Sweep(1d,fade,regime)",
+            Box::new(LiquiditySweepStrategy::new()),
+            sweep_risk,
+        ),
     ];
 
     // -- Run each strategy ------------------------------------------------------
@@ -245,7 +259,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .chars()
             .map(|c| if c.is_alphanumeric() || c == '-' { c } else { '_' })
             .collect();
-        let base = format!("/backtesting/reports/backtest_{}_{}", date, slug);
+        let base = format!("backtesting/reports/backtest_{}_{}", date, slug);
         report.write_json(&format!("{}.json", base))?;
         report.write_trades_csv(&format!("{}_trades.csv", base))?;
         println!("  {}.json + _trades.csv", base);
